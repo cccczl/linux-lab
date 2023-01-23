@@ -70,7 +70,7 @@ if (out.decode("utf-8").find("$ ")) == -1 and (out.decode("utf-8").find("# ")) =
 
 ser.write(run_cmd.encode("utf-8") + b"\r\n")
 out = b''
-while out.decode("utf-8").find("$ ") == -1 and (out.decode("utf-8").find("# ")) == -1:
+while "$ " not in out.decode("utf-8") and "# " not in out.decode("utf-8"):
     out = b''
     time.sleep(0.2)
     while ser.inWaiting() > 0:

@@ -106,25 +106,16 @@ class func_node:
 
 	def avg_time(self):
 		count = len(self.callers)
-		if self.total_time==-1:
-			return -1
-		else:
-			return self.total_time/count
+		return -1 if self.total_time==-1 else self.total_time/count
 
 	def time_range(self):
-		if self.call_count > 1:
-			return "(%d-%d)" % (self.min, self.max)
-		else:
-			return ""
+		return "(%d-%d)" % (self.min, self.max) if self.call_count > 1 else ""
 
 	def sub_time(self):
 		return self.sub_time
 
 	def local_time(self):
-		if self.total_time!=-1:
-			return self.total_time - self.sub_time
-		else:
-			return -1
+		return self.total_time - self.sub_time if self.total_time!=-1 else -1
 
 	def sub_list(self):
 		return str(self.sub_list.keys())
@@ -157,13 +148,9 @@ def max_sub(parent_func):
 			sub_func = funcs[name]
 			if not max_sub:
 				max_sub = sub_func
-			else:
-				if sub_func.time() > max_sub.time():
-					max_sub = sub_func
-	if max_sub:
-		return max_sub.get_name()
-	else:
-		return ""
+			elif sub_func.time() > max_sub.time():
+				max_sub = sub_func
+	return max_sub.get_name() if max_sub else ""
 
 def max_sub_count(parent_func):
 	global funcs_for_max_sub
@@ -172,24 +159,21 @@ def max_sub_count(parent_func):
 	funcs = funcs_for_max_sub
 	max_sub = None
 	max_time = 0
-	for (name, pid, duration, a1, a2, a3) in parent_func.subs:
+	for name, pid, duration, a1, a2, a3 in parent_func.subs:
 		if funcs.has_key(name):
 			sub_func = funcs[name]
 			if not max_sub:
 				max_sub = sub_func
-			else:
-				if sub_func.time() > max_sub.time():
-					max_sub = sub_func
-	if max_sub:
-		ms_name = max_sub.get_name()
-		ms_count = 0
-		for (name, pid, duration, a1, a2, a3) in parent_func.subs:
-			if funcs.has_key(name):
-				if name == ms_name:
-					ms_count = ms_count + 1
-		return ms_count
-	else:
+			elif sub_func.time() > max_sub.time():
+				max_sub = sub_func
+	if not max_sub:
 		return 0
+	ms_name = max_sub.get_name()
+	ms_count = 0
+	for name, pid, duration, a1, a2, a3 in parent_func.subs:
+		if funcs.has_key(name) and name == ms_name:
+			ms_count = ms_count + 1
+	return ms_count
 
 class display_flags:
 	pass
@@ -214,22 +198,15 @@ class tree_node:
 		self.local_time = self.duration
 		self.thread_char = None
 		self.depth = UNDEFINED
-		if a1 or a2 or a3:
-			self.args = a1 + " " + a2 + " " + a3
-		else:
-			self.args = ""
+		self.args = f"{a1} {a2} {a3}" if a1 or a2 or a3 else ""
 
 	def is_active(self, time):
-		if self.entry_time <= time and time <= self.exit_time:
-			return True
-		else:
-			return False
+		return self.entry_time <= time <= self.exit_time
 
 	def add_child(self, node):
 		self.children.append(node)
 		self.local_time -= node.duration
-		if self.local_time < 0:
-			self.local_time = 0
+		self.local_time = max(self.local_time, 0)
 
 	def add_parent(self, node):
 		self.parent = node
@@ -278,15 +255,10 @@ class tree_node:
 		# define thread_char for this thread
 		self.set_thread_char()
 
-		# set depth, if unknown
 		if self.depth==UNDEFINED:
-			if self.parent:
-				self.depth = self.parent.depth+1
-			else:
-				self.depth = 0
-
+			self.depth = self.parent.depth+1 if self.parent else 0
 		# following works for self.depth==0 also
-		indent += ("%s  " % self.thread_char)*self.depth
+		indent += f"{self.thread_char}  " * self.depth
 
 		# set arg_indent to compensate for length of indent
 		arg_indent = ""
@@ -309,23 +281,17 @@ class tree_node:
 		global roots_remaining
 
 		# check for another thread start
-		if dflags.intermingle_threads:
-			if roots_remaining:
-				next_root = roots_remaining[0]
-				while next_root and next_root.entry_time < self.entry_time:
-					del(roots_remaining[0])
-					next_root.set_thread_char()
-					print "----------- %s start --------------" % (next_root.thread_char * 4)
-					next_root.show_threads()
-					print "----------- %s end ----------------" % (next_root.thread_char * 4)
-					if roots_remaining:
-						next_root = roots_remaining[0]
-					else:
-						next_root = None
-
+		if dflags.intermingle_threads and roots_remaining:
+			next_root = roots_remaining[0]
+			while next_root and next_root.entry_time < self.entry_time:
+				del(roots_remaining[0])
+				next_root.set_thread_char()
+				del(roots_remaining[0])
+				next_root.show_threads()
+				del(roots_remaining[0])
+				next_root = roots_remaining[0] if roots_remaining else None
 		(indent, arg_indent) = self.get_indents()
-		print "%s%s%s%s" % (indent, self.name, arg_indent, self.args)
-
+		global dflags
 		for child in self.children:
 			child.show_threads()
 
@@ -420,12 +386,7 @@ def parse_lines(lines, do_call_tree, do_rt_tree):
 			# add to tree
 			new_node = tree_node(func_name, entry, delta, pid, called_at, a1, a2, a3)
 
-			# remove any functions now out of duration scope
-			# add them to replacement stack
-			new_tree_stack = []
-			for node in tree_stack:
-				if node.is_active(int(entry)):
-					new_tree_stack.append(node)
+			new_tree_stack = [node for node in tree_stack if node.is_active(int(entry))]
 			tree_stack = new_tree_stack
 
 			# find the bottom-most caller from the tree stack
@@ -493,6 +454,7 @@ class column:
 		self.tlen = len
 		self.data_func = data_func
 	def show_title(self):
+		format = f"%-{self.tlen}s"
 		format = "%-"+"%ss" % self.tlen
 		print format % self.name,
 	def show_underline(self):
